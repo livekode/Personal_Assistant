@@ -11,9 +11,15 @@ import csv
 import glob
 from datetime import datetime
 from typing import List, Dict, Optional
-
 from dotenv import load_dotenv
 from loguru import logger
+from pipecat.frames.frames import Frame, TextFrame, LLMMessagesFrame
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+import asyncio
+import time
+import openai
+import tool_enabled_llm
+from tool_enabled_llm import process_query
 
 print("🚀 Starting Pipecat bot...")
 print("⏳ Loading models and imports (20 seconds, first run only)\n")
@@ -58,6 +64,7 @@ class ConversationLogger:
         role_icon = "👤" if role == "user" else "🤖" if role == "assistant" else "⚙️"
         preview = message[:50] + "..." if len(message) > 50 else message
         logger.info(f"{role_icon} CSV LOG: [{role}] {preview}")
+        
     
     def get_conversation_history(self, max_sessions: int = 5, max_messages_per_session: int = 10) -> str:
         """Retrieve conversation history from CSV files.
@@ -166,6 +173,133 @@ except Exception as e:
 
 load_dotenv(override=True)
 
+# adding a delay. in the llmservice for other stuff
+from pipecat.services.openai.llm import OpenAILLMService
+
+import os
+import asyncio
+import logging
+from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
+
+import os
+import asyncio
+import logging
+from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
+
+class DelayedLLMService(OpenAILLMService):
+    def __init__(self, delay_seconds=1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.delay_seconds = delay_seconds
+        self._last_user_message_time = None
+        self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        logger.info("✅ DelayedLLMService initialized")
+        
+        # Configure logging
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+    
+    async def call_llm(self, prompt):
+        """Call OpenAI LLM."""
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt}
+        ]
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=messages,
+                temperature=0.1,
+                max_tokens=150
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"❌ Error calling OpenAI: {e}")
+            return "NO"
+    
+    async def get_user_message(self, context):
+        """Extract the most recent user message from context."""
+        if not context or not hasattr(context, 'messages') or not context.messages:
+            return None
+        
+        for msg in reversed(context.messages):
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                return msg.get("content")
+        return None
+    
+    async def are_tools_needed(self, context):
+        """Determine if tools are needed based on user message."""
+        self.logger.info("🔧 CHECKING if tools are needed...")
+        
+        user_content = await self.get_user_message(context)
+        
+        if not user_content:
+            self.logger.warning("⚠️ No user content found")
+            return False
+        
+        self.logger.info(f"📝 Analyzing: '{user_content[:100]}...'")
+        
+        tool_check_prompt = f"""
+        Determine if this message needs real-time data or tools:
+        "{user_content}"
+        
+        Answer ONLY "YES" or "NO":
+        """
+        
+        response = await self.call_llm(tool_check_prompt)
+        result = response.strip().upper() == "YES"
+        
+        self.logger.info(f"🔧 TOOLS NEEDED: {result}")
+        return result
+    
+    async def _stream_chat_completions_universal_context(self, context):
+        """Override the method that actually streams completions."""
+        self.logger.info("🚨🚨🚨 _stream_chat_completions_universal_context CALLED! 🚨🚨🚨")
+        
+        # Check if we have user messages
+        if context and hasattr(context, 'messages') and context.messages:
+            user_messages = [m for m in context.messages if isinstance(m, dict) and m.get("role") == "user"]
+            if user_messages:
+                latest_user = user_messages[-1]
+                self.logger.info(f"👤 Processing user message: '{latest_user.get('content', '')[:50]}...'")
+                
+                
+            
+                current_time = asyncio.get_event_loop().time()
+                
+                self.logger.info(f"⏰ First message, waiting {self.delay_seconds}s...")
+                await asyncio.sleep(self.delay_seconds)
+                
+                # Check if tools are needed
+                self.logger.info("🔍 Running tool check from _stream_chat_completions_universal_context...")
+                needs_tools = await self.are_tools_needed(context)
+                
+                if needs_tools:
+                    self.logger.info("🚨 TOOLS REQUIRED - Would trigger tool pipeline here")
+                    user_content = await self.get_user_message(context)
+                    additional_info=process_query(user_content)
+                    self.logger.info(f"🚨 got more info from langraph successfully {additional_info}")
+                    context.messages.append({
+                    "role": "system",
+                    "content": f"REAL-TIME INFORMATION: {additional_info}"
+                })
+                    
+                    # TODO: You could modify the context or take other actions here
+                else:
+                    self.logger.info("💬 No tools needed - continuing normally")
+                
+                self._last_user_message_time = current_time
+            
+        
+        # Call the parent method to actually generate the response
+        self.logger.debug("➡️ Calling parent _stream_chat_completions_universal_context")
+        return await super()._stream_chat_completions_universal_context(context)
+
+
 # ==================== CUSTOM MESSAGE LIST WITH PERIODIC HISTORY UPDATES ====================
 class LoggedMessageList(list):
     """A list that logs messages and periodically updates conversation history."""
@@ -265,7 +399,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
     )
 
-    llm = OpenAILLMService(api_key=os.getenv("OPENAI_API_KEY"))
+    llm = DelayedLLMService(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    delay_seconds=1  # Your 1-second delay
+)
+    
+ 
 
     # Enhanced system prompt that encourages using conversation history
     system_prompt = """You are a friendly AI assistant with access to the user's conversation history. 

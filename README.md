@@ -44,6 +44,7 @@ Navigate to the quickstart directory and set up your environment.
    SPEECHMATICS_API_KEY=your_speechmatics_api_key
    OPENAI_API_KEY=your_openai_api_key
    SPEECHMATICS_API_KEY=your_cartesia_api_key
+   TAVILY_API_KEY=your_tavily_api_key
    ```
 
 ### Run your bot locally
@@ -57,10 +58,16 @@ uv run bot_history.py (most recent bot version at the moment)
 
 ---
 
+# updates:
+Added Langraph, added websearch functionality, now the agent can search the internet via tavily search and return better responses. however, now, you require a Taviliy API key
+
+
 # Whats Next
 
-1. Add Ai Agents. Tools like  web search,  a calender tool in order to book meetings, and a gmail tool to send emails would add much needed functionality
+1.Add more tools,  a calender tool in order to book meetings, and a gmail tool to send emails 
 
 2. Design a front end application, give the pseronal assistant some personality
 
-3. Containerize and Deploy the application in a production server
+3. Containerize and Deploy the application
+
+
