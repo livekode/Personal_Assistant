@@ -18,6 +18,7 @@ with a large language model. Used pipecat for orchestration as its opensource
 - [Speechmatics] for Speech-to-Text
 - [OpenAI] for LLM inference
 - [Cartesia] for Text-to-Speech
+- [TAVILY] for enabling Tavily Search
 
 
 
@@ -50,7 +51,7 @@ Navigate to the quickstart directory and set up your environment.
 ### Run your bot locally
 
 ```bash
-uv run bot_history.py (most recent bot version at the moment)
+uv run noise_cancellation.py (most recent bot version at the moment)
 ```
 
 **Open http://localhost:7860 in your browser** and click `Connect` to start talking to your bot.
@@ -59,8 +60,9 @@ uv run bot_history.py (most recent bot version at the moment)
 ---
 
 # updates:
-Added Langraph, added websearch functionality, now the agent can search the internet via tavily search and return better responses. however, now, you require a Taviliy API key
+Added Langraph, added websearch functionality, now the agent can search the internet via tavily search and return better responses. however, you now require a Taviliy API key
 
+Added voice cancellation to the pipeline, using default noice cancellation parameters.
 
 # Whats Next
 

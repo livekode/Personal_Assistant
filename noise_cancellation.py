@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 #based. upon bot_logging  you. bot now hhas access to chat history
-"""Pipecat Quickstart Example with CSV Logging and Conversation History."""
+"""Pipecat implementation. after implementing langraph, now implementingh noise cancellation"""
 
 import os
 import csv
@@ -20,6 +20,30 @@ import time
 import openai
 import tool_enabled_llm
 from tool_enabled_llm import process_query
+from pipecat.audio.filters.noisereduce_filter import NoisereduceFilter
+from pipecat.transports.daily.transport import DailyTransport, DailyParams
+from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.pipeline.pipeline import Pipeline
+from pipecat.pipeline.runner import PipelineRunner
+from pipecat.pipeline.task import PipelineParams, PipelineTask
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
+from pipecat.runner.types import RunnerArguments
+from pipecat.runner.utils import create_transport
+from pipecat.services.cartesia.tts import CartesiaTTSService
+from pipecat.services.deepgram.stt import DeepgramSTTService
+from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.transports.base_transport import BaseTransport, TransportParams
+from pipecat.services.speechmatics.stt import SpeechmaticsSTTService
+
+logger.info("✅ All components loaded successfully!")
+
+# ==================== GLOBAL SSL FIX ====================
+import ssl
+import certifi
 
 print("🚀 Starting Pipecat bot...")
 print("⏳ Loading models and imports (20 seconds, first run only)\n")
@@ -139,28 +163,7 @@ logger.info("✅ Silero VAD model loaded")
 from pipecat.frames.frames import LLMRunFrame
 
 logger.info("Loading pipeline components...")
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import (
-    LLMContextAggregatorPair,
-    LLMUserAggregatorParams,
-)
-from pipecat.runner.types import RunnerArguments
-from pipecat.runner.utils import create_transport
-from pipecat.services.cartesia.tts import CartesiaTTSService
-from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.transports.base_transport import BaseTransport, TransportParams
-from pipecat.transports.daily.transport import DailyParams
-from pipecat.services.speechmatics.stt import SpeechmaticsSTTService
 
-logger.info("✅ All components loaded successfully!")
-
-# ==================== GLOBAL SSL FIX ====================
-import ssl
-import certifi
 
 try:
     os.environ['SSL_CERT_FILE'] = certifi.where()
@@ -476,12 +479,28 @@ a past conversation. If this is their first time, just give a warm welcome."""
     await runner.run(task)
 
 
+
+## incase I wish to modify my filer settings
+
+'''
+audio_in_filter=NoisereduceFilter(
+    stationary=False,  # True for constant noise, False for changing noise
+    prop_decrease=0.9,  # Reduction strength (0.0-1.0)
+    time_constant_s=2.0,  # Adaptation speed for non-stationary noise
+),
+'''
+
+
+
 async def bot(runner_args: RunnerArguments):
     """Main bot entry point for the bot starter."""
 
     transport_params = {
         "daily": lambda: DailyParams(
             audio_in_enabled=True,
+            audio_in_filter=NoisereduceFilter(),
+            vad_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(),
             audio_out_enabled=True,
         ),
         "webrtc": lambda: TransportParams(
